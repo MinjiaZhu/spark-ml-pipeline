@@ -1,112 +1,21 @@
-# Kubernetes CronJob for running Spark prediction job
-#
-# This uses the spark-on-k8s-operator (https://github.com/GoogleCloudPlatform/spark-on-k8s-operator)
-# For GCP DataProc, use `gcloud dataproc jobs submit pyspark` instead
-#
-# Prerequisites:
-# - spark-on-k8s-operator installed in cluster
-# - Docker image built with prediction code
-# - Config API accessible from cluster
-
-apiVersion: "sparkoperator.k8s.io/v1beta2"
-kind: ScheduledSparkApplication
-metadata:
-  name: campaign-prediction-job
-  namespace: default
-spec:
-  schedule: "0 2 * * *"  # Run daily at 2 AM
-  concurrencyPolicy: Forbid
-  template:
-    type: Python
-    pythonVersion: "3"
-    mode: cluster
-    image: "gcr.io/your-project/spark-predict:latest"  # Replace with your image
-    imagePullPolicy: Always
-    mainApplicationFile: local:///app/3_predict_job/predict_task.py
-
-    arguments:
-      - "--campaign-id=1"  # Replace with actual campaign ID or parameterize
-      - "--config-api-url=http://config-api-service:8000"
-      - "--input-data=gs://your-bucket/data/users.parquet"  # GCS path
-      - "--output-dir=gs://your-bucket/output"  # GCS path
-
-    sparkVersion: "3.5.0"
-
-    restartPolicy:
-      type: OnFailure
-      onFailureRetries: 3
-      onFailureRetryInterval: 10
-      onSubmissionFailureRetries: 5
-      onSubmissionFailureRetryInterval: 20
-
-    driver:
-      cores: 1
-      memory: "2g"
-      labels:
-        version: 3.5.0
-      serviceAccount: spark
-
-    executor:
-      cores: 2
-      instances: 2
-      memory: "4g"
-      labels:
-        version: 3.5.0
-
-    deps:
-      packages:
-        - "org.apache.hadoop:hadoop-aws:3.3.4"  # If using S3
-
----
-# Alternative: Simple Kubernetes CronJob (without spark-operator)
-# Use this if you don't have spark-operator installed
-
+# simple Cron job, airflow in prod
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: campaign-prediction-simple
+  name: ml-predict-job
 spec:
-  schedule: "0 2 * * *"  # Daily at 2 AM
+  schedule: "0 2 * * *"  # Run daily at 2 AM
   jobTemplate:
     spec:
       template:
         spec:
-          restartPolicy: OnFailure
           containers:
-          - name: spark-submit
-            image: gcr.io/spark-operator/spark:v3.5.0  # Base Spark image
-            command:
-            - /opt/spark/bin/spark-submit
-            - --master
-            - k8s://https://kubernetes.default.svc
-            - --deploy-mode
-            - cluster
-            - --name
-            - campaign-prediction
-            - --conf
-            - spark.kubernetes.container.image=gcr.io/your-project/spark-predict:latest
-            - --conf
-            - spark.executor.instances=2
-            - --conf
-            - spark.executor.memory=4g
-            - --conf
-            - spark.driver.memory=2g
-            - local:///app/3_predict_job/predict_task.py
-            - --campaign-id=1
-            - --config-api-url=http://config-api-service:8000
-
----
-# For GCP DataProc, use gcloud command:
-#
-# gcloud dataproc jobs submit pyspark \
-#   gs://your-bucket/code/predict_task.py \
-#   --cluster=your-dataproc-cluster \
-#   --region=us-central1 \
-#   --py-files=gs://your-bucket/code/dependencies.zip \
-#   -- \
-#   --campaign-id=1 \
-#   --config-api-url=http://your-api.example.com \
-#   --input-data=gs://your-bucket/data/users.parquet \
-#   --output-dir=gs://your-bucket/output
-#
-# Or schedule with Cloud Scheduler + Cloud Functions to trigger the job
+          - name: spark-predict
+            image: ml-campaign-optimizer:latest
+            command: ["python", "3_predict_job/predict_spark.py"]
+            env:
+            - name: CAMPAIGN_ID
+              value: "1"
+            - name: CONFIG_API_URL
+              value: "http://config-api-service:8000"
+          restartPolicy: OnFailure
