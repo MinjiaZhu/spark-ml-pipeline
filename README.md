@@ -1,4 +1,8 @@
-Architecture Overview
+## Architecture Overview
+
+### Config Management Layer
+
+```
 ┌─────────────────┐
 │   FastAPI       │  ← Config Management API (CRUD)
 │   Config API    │  
@@ -9,7 +13,11 @@ Architecture Overview
 │   PostgreSQL    │  ← Campaign configurations
 │   Config DB     │  
 └─────────────────┘
-                        
+```
+
+### Prediction Pipeline
+
+```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │  Sample User    │────▶│  Spark Predict   │────▶│  Predictions    │
 │  Features       │     │  Job (PySpark)   │     │  Output         │
@@ -22,11 +30,21 @@ Architecture Overview
                         │ (.pkl file)    │
                         │  CatBoost      │
                         └────────────────┘
-The Flow:
+```
 
-Config API: Marketer creates campaign config via FastAPI (which model, which audience)
-Batch Job: Spark job reads config → loads users → loads model → scores users
-Results: Predictions written to parquet (in prod: BigQuery)
+**Components:**
+- **FastAPI Config API**: RESTful API for managing campaign configurations
+- **PostgreSQL**: Stores campaign metadata (model path, audience filters, etc.)
+- **Spark Predict Job**: Distributed batch processing using PySpark
+- **CatBoost Model**: Pre-trained ML model loaded from `.pkl` file
+- **User Features**: Input data in Parquet format
+- **Predictions Output**: Scored results in Parquet format
+
+### The Flow
+
+1. **Config API**: Marketer creates campaign config via FastAPI (which model, which audience)
+2. **Batch Job**: Spark job reads config → loads users → loads model → scores users
+3. **Results**: Predictions written to parquet (in prod: BigQuery)
 
 ---
 
